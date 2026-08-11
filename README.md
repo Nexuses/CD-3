@@ -28,13 +28,13 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm run dev` | Start Next.js dev server |
 | `npm run build` | Production build |
 | `npm run db:seed` | Re-seed demo merchants, categories, offers |
-| `npm run db:reset` | Reset SQLite DB and re-seed |
+| `npm run db:reset` | Reset DB and re-seed |
 
 ## What’s included
 
 - **Public:** Home, `/stores` (A–Z), `/category/[slug]`, `/[merchant-slug]`, offer reveal modal, click counter
 - **Admin:** Login (cookie session), dashboard stats, CRUD for stores / categories / offers
-- **Stack:** Next.js 15, Prisma, SQLite, Tailwind CSS v4
+- **Stack:** Next.js 15, Prisma, PostgreSQL, Tailwind CSS v4
 - **Design:** Coinbase-inspired institutional UI — white canvas, Coinbase Blue CTAs, dark heroes (`design.md`)
 
 ## Notes

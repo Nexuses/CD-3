@@ -45,3 +45,8 @@ prisma/*.db
 prisma/*.db-journal
 
 /app/generated/prisma
+
+# local db provisioning leftovers
+.create-db.json
+.db-url.tmp
+.db-claim.txt
