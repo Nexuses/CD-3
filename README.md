@@ -34,11 +34,36 @@ Open [http://localhost:3000](http://localhost:3000).
 
 - **Public:** Home, `/stores` (A–Z), `/category/[slug]`, `/[merchant-slug]`, offer reveal modal, click counter
 - **Admin:** Login (cookie session), dashboard stats, CRUD for stores / categories / offers
-- **Stack:** Next.js 15, Prisma, PostgreSQL, Tailwind CSS v4
+- **Stack:** Next.js 15, Prisma, PostgreSQL (Supabase), Tailwind CSS v4
 - **Design:** Coinbase-inspired institutional UI — white canvas, Coinbase Blue CTAs, dark heroes (`design.md`)
+
+## Deploy to Vercel
+
+1. Push this repo to GitHub (do **not** commit `.env` or `node_modules`).
+2. Import the repo on [vercel.com](https://vercel.com).
+3. **Important:** In Vercel → **Settings → General → Root Directory**, leave it **empty** (do not set `new CD`). The app lives at the repo root.
+4. Open **Settings → Environment Variables** and add:
+
+   | Name | Value |
+   |------|--------|
+   | `DATABASE_URL` | Supabase URI from **Project Settings → Database → Connection string → URI** |
+   | `AUTH_SECRET` | Any long random string |
+
+   Enable **Production** (and **Preview** if you use preview deploys).
+
+5. **Redeploy** after saving env vars (Deployments → ⋯ → Redeploy).
+
+Tables and demo data should already exist on Supabase. If the live site is empty, run locally once:
+
+```bash
+npx prisma db push
+npm run db:seed
+```
+
+See [`.env.example`](.env.example) for the variable names.
 
 ## Notes
 
 - Demo logos are inline SVG data URIs.
 - Affiliate URLs are placeholder `?ref=couponchrome` links.
-- Change `AUTH_SECRET` in `.env` before deploying.
+- Never commit `.env` — Vercel reads env vars from its dashboard, not from your repo.
