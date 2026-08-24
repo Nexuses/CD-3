@@ -1,4 +1,4 @@
-import mongoose, { Schema, type InferSchemaType, type Model } from "mongoose";
+import mongoose, { Schema, type Model } from "mongoose";
 
 const adminSchema = new Schema(
   {
@@ -54,16 +54,11 @@ const offerSchema = new Schema(
 offerSchema.index({ merchantId: 1, isActive: 1 });
 offerSchema.index({ type: 1, isActive: 1 });
 
-function getModel<T>(name: string, schema: Schema): Model<T> {
-  return (mongoose.models[name] as Model<T>) || mongoose.model<T>(name, schema);
+function getModel(name: string, schema: Schema): Model<mongoose.Document> {
+  return (mongoose.models[name] as Model<mongoose.Document>) || mongoose.model(name, schema);
 }
 
-export type AdminDoc = InferSchemaType<typeof adminSchema> & { _id: mongoose.Types.ObjectId };
-export type MerchantDoc = InferSchemaType<typeof merchantSchema> & { _id: mongoose.Types.ObjectId };
-export type CategoryDoc = InferSchemaType<typeof categorySchema> & { _id: mongoose.Types.ObjectId };
-export type OfferDoc = InferSchemaType<typeof offerSchema> & { _id: mongoose.Types.ObjectId };
-
-export const Admin = getModel<AdminDoc>("Admin", adminSchema);
-export const Merchant = getModel<MerchantDoc>("Merchant", merchantSchema);
-export const Category = getModel<CategoryDoc>("Category", categorySchema);
-export const Offer = getModel<OfferDoc>("Offer", offerSchema);
+export const Admin = getModel("Admin", adminSchema);
+export const Merchant = getModel("Merchant", merchantSchema);
+export const Category = getModel("Category", categorySchema);
+export const Offer = getModel("Offer", offerSchema);

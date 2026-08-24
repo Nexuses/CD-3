@@ -50,3 +50,9 @@ next-env.d.ts
 /new CD/
 /new-2/
 new CD.zip
+
+# agent skill packs (not part of the app; bloats Vercel clones)
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
