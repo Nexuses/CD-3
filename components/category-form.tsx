@@ -6,7 +6,7 @@ import Link from "next/link";
 import { FeatureCard, ButtonPrimary } from "@/components/ui";
 import { slugify } from "@/lib/utils";
 
-type CatOption = { id: number; name: string };
+type CatOption = { id: string; name: string };
 
 const inputCls =
   "mt-1.5 w-full h-12 px-4 text-sm bg-canvas border border-hairline rounded-md outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
@@ -16,10 +16,10 @@ export function CategoryForm({
   parents,
 }: {
   initial?: {
-    id: number;
+    id: string;
     name: string;
     slug: string;
-    parentId: number | null;
+    parentId: string | null;
   };
   parents: CatOption[];
 }) {
@@ -45,7 +45,7 @@ export function CategoryForm({
         body: JSON.stringify({
           name,
           slug: slug || slugify(name),
-          parentId: parentId ? Number(parentId) : null,
+          parentId: parentId || null,
         }),
       });
       const data = await res.json();

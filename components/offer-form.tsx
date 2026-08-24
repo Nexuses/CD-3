@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FeatureCard, ButtonPrimary } from "@/components/ui";
 
-type MerchantOpt = { id: number; name: string };
-type CategoryOpt = { id: number; name: string };
+type MerchantOpt = { id: string; name: string };
+type CategoryOpt = { id: string; name: string };
 
 type OfferInitial = {
-  id?: number;
-  merchantId: number;
+  id?: string;
+  merchantId: string;
   type: string;
   title: string;
   subtitle: string;
@@ -21,7 +21,7 @@ type OfferInitial = {
   isExclusive: boolean;
   expiryDate: string | null;
   isActive: boolean;
-  categoryIds: number[];
+  categoryIds: string[];
   bankTags: string[];
 };
 
@@ -57,7 +57,7 @@ export function OfferForm({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function toggleCat(id: number) {
+  function toggleCat(id: string) {
     setForm((f) => ({
       ...f,
       categoryIds: f.categoryIds.includes(id)
@@ -72,7 +72,7 @@ export function OfferForm({
     setError("");
     try {
       const payload = {
-        merchantId: Number(form.merchantId),
+        merchantId: form.merchantId,
         type: form.type,
         title: form.title,
         subtitle: form.subtitle,

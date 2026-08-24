@@ -1,29 +1,41 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { connectDB } from "@/lib/mongodb";
+import { Category, Merchant, Offer } from "@/lib/models";
+import { mapId, offerShape } from "@/lib/serialize";
 import { FeatureCard, ButtonPrimary, ButtonSecondary } from "@/components/ui";
 
 export default async function AdminDashboardPage() {
   const session = await getSession();
   if (!session) redirect("/admin/login");
 
-  const [stores, offers, categories, clicksAgg, recentOffers, recentStores] =
+  await connectDB();
+  const [stores, offers, categories, clicksAgg, recentOfferDocs, recentStoreDocs] =
     await Promise.all([
-      prisma.merchant.count(),
-      prisma.offer.count({ where: { isActive: true } }),
-      prisma.category.count(),
-      prisma.offer.aggregate({ _sum: { clickCount: true } }),
-      prisma.offer.findMany({
-        orderBy: { updatedAt: "desc" },
-        take: 5,
-        include: { merchant: { select: { name: true } } },
-      }),
-      prisma.merchant.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
+      Merchant.countDocuments(),
+      Offer.countDocuments({ isActive: true }),
+      Category.countDocuments(),
+      Offer.aggregate([{ $group: { _id: null, total: { $sum: "$clickCount" } } }]),
+      Offer.find()
+        .sort({ updatedAt: -1 })
+        .limit(5)
+        .populate("merchantId", "name")
+        .lean(),
+      Merchant.find().sort({ createdAt: -1 }).limit(5).lean(),
     ]);
 
-  const totalClicks = clicksAgg._sum.clickCount || 0;
+  const totalClicks = (clicksAgg[0]?.total as number) || 0;
   const clicksToday = Math.floor(totalClicks * 0.03);
+  const recentOffers = recentOfferDocs.map((o) => {
+    const shaped = offerShape(o);
+    return {
+      id: shaped.id,
+      title: shaped.title,
+      merchant: { name: shaped.merchant?.name || "" },
+    };
+  });
+  const recentStores = mapId(recentStoreDocs);
 
   const stats = [
     { label: "Total stores", value: stores, href: "/admin/stores" },

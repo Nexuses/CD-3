@@ -1,15 +1,17 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { connectDB } from "@/lib/mongodb";
+import { Category } from "@/lib/models";
+import { mapId } from "@/lib/serialize";
 import { CategoryForm } from "@/components/category-form";
 
 export default async function NewCategoryPage() {
   const session = await getSession();
   if (!session) redirect("/admin/login");
-  const parents = await prisma.category.findMany({
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  await connectDB();
+  const parents = mapId(
+    await Category.find().sort({ name: 1 }).select("name").lean(),
+  ).map((p) => ({ id: p.id, name: p.name as string }));
   return (
     <div className="space-y-3">
       <h1 className="display-sm text-ink m-0 !text-[28px]">Add Category</h1>

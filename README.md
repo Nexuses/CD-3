@@ -6,7 +6,7 @@ Coupon & deal directory inspired by CouponDunia’s layout, styled with a Ninten
 
 ```bash
 npm install
-npx prisma db push
+# Copy .env.example → .env and set MONGODB_URI + AUTH_SECRET
 npm run db:seed
 npm run dev
 ```
@@ -28,13 +28,13 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm run dev` | Start Next.js dev server |
 | `npm run build` | Production build |
 | `npm run db:seed` | Re-seed demo merchants, categories, offers |
-| `npm run db:reset` | Reset DB and re-seed |
+| `npm run db:reset` | Clear and re-seed MongoDB |
 
 ## What’s included
 
 - **Public:** Home, `/stores` (A–Z), `/category/[slug]`, `/[merchant-slug]`, offer reveal modal, click counter
 - **Admin:** Login (cookie session), dashboard stats, CRUD for stores / categories / offers
-- **Stack:** Next.js 15, Prisma, PostgreSQL (Supabase), Tailwind CSS v4
+- **Stack:** Next.js 15, MongoDB Atlas (Mongoose), Tailwind CSS v4
 - **Design:** Coinbase-inspired institutional UI — white canvas, Coinbase Blue CTAs, dark heroes (`design.md`)
 
 ## Deploy to Vercel
@@ -46,17 +46,16 @@ Open [http://localhost:3000](http://localhost:3000).
 
    | Name | Value |
    |------|--------|
-   | `DATABASE_URL` | Supabase URI from **Project Settings → Database → Connection string → URI** |
+   | `MONGODB_URI` | MongoDB Atlas connection string (include database name, e.g. `/couponchrome`) |
    | `AUTH_SECRET` | Any long random string |
 
    Enable **Production** (and **Preview** if you use preview deploys).
 
 5. **Redeploy** after saving env vars (Deployments → ⋯ → Redeploy).
 
-Tables and demo data should already exist on Supabase. If the live site is empty, run locally once:
+Seed the database once locally (or from CI) before going live:
 
 ```bash
-npx prisma db push
 npm run db:seed
 ```
 

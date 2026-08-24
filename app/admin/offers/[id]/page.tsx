@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { connectDB } from "@/lib/mongodb";
+import { Category, Merchant, Offer } from "@/lib/models";
+import { asObjectId, mapId } from "@/lib/serialize";
 import { OfferForm } from "@/components/offer-form";
 
 export default async function EditOfferPage({
@@ -10,15 +12,14 @@ export default async function EditOfferPage({
 }) {
   const session = await getSession();
   if (!session) redirect("/admin/login");
-  const id = Number((await params).id);
+  await connectDB();
+  const oid = asObjectId((await params).id);
+  if (!oid) notFound();
 
   const [offer, merchants, categories] = await Promise.all([
-    prisma.offer.findUnique({
-      where: { id },
-      include: { categories: true, bankTags: true },
-    }),
-    prisma.merchant.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.category.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    Offer.findById(oid).lean(),
+    Merchant.find().sort({ name: 1 }).select("name").lean(),
+    Category.find().sort({ name: 1 }).select("name").lean(),
   ]);
 
   if (!offer) notFound();
@@ -31,11 +32,11 @@ export default async function EditOfferPage({
     <div className="space-y-3">
       <h1 className="display-sm text-ink m-0 !text-[28px]">Edit offer</h1>
       <OfferForm
-        merchants={merchants}
-        categories={categories}
+        merchants={mapId(merchants).map((m) => ({ id: m.id, name: m.name as string }))}
+        categories={mapId(categories).map((c) => ({ id: c.id, name: c.name as string }))}
         initial={{
-          id: offer.id,
-          merchantId: offer.merchantId,
+          id: String(offer._id),
+          merchantId: String(offer.merchantId),
           type: offer.type,
           title: offer.title,
           subtitle: offer.subtitle,
@@ -46,8 +47,8 @@ export default async function EditOfferPage({
           isExclusive: offer.isExclusive,
           expiryDate,
           isActive: offer.isActive,
-          categoryIds: offer.categories.map((c) => c.categoryId),
-          bankTags: offer.bankTags.map((b) => b.tagName),
+          categoryIds: (offer.categoryIds || []).map(String),
+          bankTags: offer.bankTags || [],
         }}
       />
     </div>

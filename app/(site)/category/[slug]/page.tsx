@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { connectDB } from "@/lib/mongodb";
+import { Category, Merchant, Offer } from "@/lib/models";
+import { mapId, offerShape } from "@/lib/serialize";
 import { OfferCard } from "@/components/offer-card";
 import { OfferTabs } from "@/components/offer-tabs";
 import { BadgePill } from "@/components/ui";
@@ -11,7 +13,8 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const cat = await prisma.category.findUnique({ where: { slug } });
+  await connectDB();
+  const cat = await Category.findOne({ slug }).lean();
   if (!cat) return { title: "Category" };
   return {
     title: `${cat.name} Coupons & Offers`,
@@ -29,66 +32,41 @@ export default async function CategoryPage({
   const { slug } = await params;
   const { type } = await searchParams;
 
-  const category = await prisma.category.findUnique({ where: { slug } });
+  await connectDB();
+  const category = await Category.findOne({ slug }).lean();
   if (!category) notFound();
 
-  const offers = await prisma.offer.findMany({
-    where: {
-      isActive: true,
-      categories: { some: { categoryId: category.id } },
-      ...(type === "coupon" || type === "deal" ? { type } : {}),
-    },
-    orderBy: { clickCount: "desc" },
-    include: {
-      merchant: { select: { id: true, slug: true, name: true, logo: true } },
-      bankTags: true,
-    },
-  });
+  const baseFilter = { isActive: true, categoryIds: category._id };
+  const typeFilter = type === "coupon" || type === "deal" ? { type } : {};
 
-  const [allCount, couponCount, dealCount] = await Promise.all([
-    prisma.offer.count({
-      where: { isActive: true, categories: { some: { categoryId: category.id } } },
-    }),
-    prisma.offer.count({
-      where: {
-        isActive: true,
-        type: "coupon",
-        categories: { some: { categoryId: category.id } },
-      },
-    }),
-    prisma.offer.count({
-      where: {
-        isActive: true,
-        type: "deal",
-        categories: { some: { categoryId: category.id } },
-      },
-    }),
+  const [offerDocs, allCount, couponCount, dealCount] = await Promise.all([
+    Offer.find({ ...baseFilter, ...typeFilter })
+      .sort({ clickCount: -1 })
+      .populate("merchantId", "slug name logo")
+      .lean(),
+    Offer.countDocuments(baseFilter),
+    Offer.countDocuments({ ...baseFilter, type: "coupon" }),
+    Offer.countDocuments({ ...baseFilter, type: "deal" }),
   ]);
 
-  const topStores = await prisma.merchant.findMany({
-    where: {
-      isActive: true,
-      offers: {
-        some: {
-          isActive: true,
-          categories: { some: { categoryId: category.id } },
-        },
-      },
-    },
-    take: 8,
-    include: {
-      _count: {
-        select: {
-          offers: {
-            where: {
-              isActive: true,
-              categories: { some: { categoryId: category.id } },
-            },
-          },
-        },
-      },
-    },
-  });
+  const offers = offerDocs.map((o) => offerShape(o));
+
+  const merchantIds = await Offer.distinct("merchantId", baseFilter);
+  const topStoreDocs = await Merchant.find({
+    isActive: true,
+    _id: { $in: merchantIds },
+  }).limit(8).lean();
+
+  const offerCounts = await Offer.aggregate([
+    { $match: baseFilter },
+    { $group: { _id: "$merchantId", count: { $sum: 1 } } },
+  ]);
+  const countMap = new Map(offerCounts.map((r) => [String(r._id), r.count as number]));
+
+  const topStores = mapId(topStoreDocs).map((s) => ({
+    ...s,
+    _count: { offers: countMap.get(s.id) || 0 },
+  }));
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 py-10 md:py-16 space-y-8">
@@ -122,8 +100,8 @@ export default async function CategoryPage({
                 className="nav-link rounded-md bg-surface-1 border border-hairline px-4 py-2 hover:border-ink inline-flex items-center gap-2"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={s.logo} alt="" className="w-5 h-5 object-contain" />
-                {s.name}{" "}
+                <img src={s.logo as string} alt="" className="w-5 h-5 object-contain" />
+                {s.name as string}{" "}
                 <span className="text-xs text-ink-tertiary">({s._count.offers})</span>
               </Link>
             ))}

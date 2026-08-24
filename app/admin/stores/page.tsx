@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { connectDB } from "@/lib/mongodb";
+import { Merchant } from "@/lib/models";
+import { offerCountsByMerchant } from "@/lib/db-helpers";
+import { mapId } from "@/lib/serialize";
 import { FeatureCard, ButtonPrimary } from "@/components/ui";
 import { DeleteButton } from "@/components/delete-button";
 
@@ -9,10 +12,15 @@ export default async function AdminStoresPage() {
   const session = await getSession();
   if (!session) redirect("/admin/login");
 
-  const stores = await prisma.merchant.findMany({
-    orderBy: { name: "asc" },
-    include: { _count: { select: { offers: true } } },
-  });
+  await connectDB();
+  const [storeDocs, offerCounts] = await Promise.all([
+    Merchant.find().sort({ name: 1 }).lean(),
+    offerCountsByMerchant(),
+  ]);
+  const stores = mapId(storeDocs).map((s) => ({
+    ...s,
+    _count: { offers: offerCounts.get(s.id) || 0 },
+  }));
 
   return (
     <div className="space-y-6">
@@ -40,7 +48,7 @@ export default async function AdminStoresPage() {
                 <tr key={s.id} className="border-t border-hairline">
                   <td className="p-4">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={s.logo} alt="" className="w-8 h-8 rounded-full" />
+                    <img src={s.logo as string} alt="" className="w-8 h-8 rounded-full" />
                   </td>
                   <td className="p-4 font-semibold text-ink">{s.name}</td>
                   <td className="p-4 text-muted">{s.slug}</td>

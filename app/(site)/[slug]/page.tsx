@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { connectDB } from "@/lib/mongodb";
+import { Category, Merchant, Offer } from "@/lib/models";
+import { mapId, offerShape, withId } from "@/lib/serialize";
 import { OfferCard } from "@/components/offer-card";
 import { OfferTabs } from "@/components/offer-tabs";
 import { BadgePill, ButtonPrimary, FeatureCard } from "@/components/ui";
@@ -29,7 +31,8 @@ export async function generateMetadata({
 }) {
   const { slug } = await params;
   if (RESERVED.has(slug)) return { title: "Not Found" };
-  const m = await prisma.merchant.findUnique({ where: { slug } });
+  await connectDB();
+  const m = await Merchant.findOne({ slug }).lean();
   if (!m) return { title: "Store" };
   return {
     title: m.seoTitle || `${m.name} Coupons & Offers`,
@@ -49,77 +52,78 @@ export default async function MerchantPage({
 
   if (RESERVED.has(slug)) notFound();
 
-  const merchant = await prisma.merchant.findUnique({
-    where: { slug, isActive: true },
-  });
-  if (!merchant) notFound();
+  await connectDB();
+  const merchantDoc = await Merchant.findOne({ slug, isActive: true }).lean();
+  if (!merchantDoc) notFound();
+  const merchant = withId(merchantDoc)!;
 
   const typeFilter = sp.type === "coupon" || sp.type === "deal" ? sp.type : undefined;
   const categorySlug = sp.category || "";
   const bank = sp.bank || "";
 
-  const offers = await prisma.offer.findMany({
-    where: {
-      merchantId: merchant.id,
-      isActive: true,
-      ...(typeFilter ? { type: typeFilter } : {}),
-      ...(categorySlug
-        ? { categories: { some: { category: { slug: categorySlug } } } }
-        : {}),
-      ...(bank ? { bankTags: { some: { tagName: bank } } } : {}),
-    },
-    orderBy: { clickCount: "desc" },
-    include: {
-      merchant: { select: { id: true, slug: true, name: true, logo: true } },
-      bankTags: true,
-      categories: { include: { category: true } },
-    },
-  });
+  const filter: Record<string, unknown> = {
+    merchantId: merchantDoc._id,
+    isActive: true,
+  };
+  if (typeFilter) filter.type = typeFilter;
+  if (bank) filter.bankTags = bank;
+  if (categorySlug) {
+    const cat = await Category.findOne({ slug: categorySlug }).select("_id").lean();
+    if (cat) filter.categoryIds = cat._id;
+  }
 
-  const [allCount, couponCount, dealCount] = await Promise.all([
-    prisma.offer.count({ where: { merchantId: merchant.id, isActive: true } }),
-    prisma.offer.count({
-      where: { merchantId: merchant.id, isActive: true, type: "coupon" },
-    }),
-    prisma.offer.count({
-      where: { merchantId: merchant.id, isActive: true, type: "deal" },
-    }),
-  ]);
+  const [offerDocs, allCount, couponCount, dealCount, allOffersForFilters, otherStoreDocs, topCategoryDocs] =
+    await Promise.all([
+      Offer.find(filter)
+        .sort({ clickCount: -1 })
+        .populate("merchantId", "slug name logo")
+        .populate("categoryIds", "slug name")
+        .lean(),
+      Offer.countDocuments({ merchantId: merchantDoc._id, isActive: true }),
+      Offer.countDocuments({ merchantId: merchantDoc._id, isActive: true, type: "coupon" }),
+      Offer.countDocuments({ merchantId: merchantDoc._id, isActive: true, type: "deal" }),
+      Offer.find({ merchantId: merchantDoc._id, isActive: true })
+        .populate("categoryIds", "slug name")
+        .lean(),
+      Merchant.find({ isActive: true, _id: { $ne: merchantDoc._id } })
+        .sort({ name: 1 })
+        .limit(6)
+        .lean(),
+      Category.find({ parentId: null }).sort({ name: 1 }).limit(8).lean(),
+    ]);
 
-  const allOffersForFilters = await prisma.offer.findMany({
-    where: { merchantId: merchant.id, isActive: true },
-    include: {
-      categories: { include: { category: true } },
-      bankTags: true,
-    },
-  });
+  const offers = offerDocs.map((o) => offerShape(o));
 
   const catCounts = new Map<string, { slug: string; name: string; count: number }>();
   const bankCounts = new Map<string, number>();
   for (const o of allOffersForFilters) {
-    for (const oc of o.categories) {
-      const prev = catCounts.get(oc.category.slug);
+    const cats = Array.isArray(o.categoryIds) ? o.categoryIds : [];
+    for (const c of cats) {
+      if (!c || typeof c !== "object" || !("_id" in c)) continue;
+      const cat = c as { slug: string; name: string };
+      const prev = catCounts.get(cat.slug);
       if (prev) prev.count += 1;
-      else
-        catCounts.set(oc.category.slug, {
-          slug: oc.category.slug,
-          name: oc.category.name,
-          count: 1,
-        });
+      else catCounts.set(cat.slug, { slug: cat.slug, name: cat.name, count: 1 });
     }
-    for (const b of o.bankTags) {
-      bankCounts.set(b.tagName, (bankCounts.get(b.tagName) || 0) + 1);
+    for (const tag of o.bankTags || []) {
+      bankCounts.set(tag, (bankCounts.get(tag) || 0) + 1);
     }
   }
 
   const totalUses = allOffersForFilters.reduce((s, o) => s + o.clickCount, 0);
+  const merchantInfo = {
+    id: merchant.id,
+    slug: merchant.slug as string,
+    name: merchant.name as string,
+    logo: merchant.logo as string,
+  };
 
   const bannerOffers = [...allOffersForFilters]
     .filter((o) => o.type === "coupon")
     .sort((a, b) => b.clickCount - a.clickCount)
     .slice(0, 3)
     .map((o) => ({
-      id: o.id,
+      id: String(o._id),
       type: o.type,
       title: o.title,
       subtitle: o.subtitle,
@@ -127,22 +131,16 @@ export default async function MerchantPage({
       affiliateUrl: o.affiliateUrl,
       discountLabel: o.discountLabel,
       isExclusive: o.isExclusive,
-      merchant: {
-        id: merchant.id,
-        slug: merchant.slug,
-        name: merchant.name,
-        logo: merchant.logo,
-      },
+      merchant: merchantInfo,
     }));
 
-  // If fewer than 3 coupons, fill with top deals/offers
   if (bannerOffers.length < 3) {
     const extras = [...allOffersForFilters]
       .sort((a, b) => b.clickCount - a.clickCount)
-      .filter((o) => !bannerOffers.some((b) => b.id === o.id))
+      .filter((o) => !bannerOffers.some((b) => b.id === String(o._id)))
       .slice(0, 3 - bannerOffers.length)
       .map((o) => ({
-        id: o.id,
+        id: String(o._id),
         type: o.type,
         title: o.title,
         subtitle: o.subtitle,
@@ -150,28 +148,13 @@ export default async function MerchantPage({
         affiliateUrl: o.affiliateUrl,
         discountLabel: o.discountLabel,
         isExclusive: o.isExclusive,
-        merchant: {
-          id: merchant.id,
-          slug: merchant.slug,
-          name: merchant.name,
-          logo: merchant.logo,
-        },
+        merchant: merchantInfo,
       }));
     bannerOffers.push(...extras);
   }
 
-  const [otherStores, topCategories] = await Promise.all([
-    prisma.merchant.findMany({
-      where: { isActive: true, NOT: { id: merchant.id } },
-      take: 6,
-      orderBy: { name: "asc" },
-    }),
-    prisma.category.findMany({
-      where: { parentId: null },
-      take: 8,
-      orderBy: { name: "asc" },
-    }),
-  ]);
+  const otherStores = mapId(otherStoreDocs);
+  const topCategories = mapId(topCategoryDocs);
 
   function filterHref(overrides: Record<string, string | undefined>) {
     const params = new URLSearchParams();
@@ -198,12 +181,12 @@ export default async function MerchantPage({
         <Link href="/stores" className="hover:text-ink">
           Stores
         </Link>{" "}
-        → {merchant.name}
+        → {merchant.name as string}
       </p>
 
       {bannerOffers.length > 0 && (
         <div className="mb-8">
-          <StoreCouponBanner storeName={merchant.name} offers={bannerOffers} />
+          <StoreCouponBanner storeName={merchant.name as string} offers={bannerOffers} />
         </div>
       )}
 
@@ -274,20 +257,20 @@ export default async function MerchantPage({
         <div className="lg:col-span-6 space-y-6 order-1 lg:order-2">
           <FeatureCard className="!p-6">
             <div className="flex gap-4 items-start">
-              <BrandLogo src={merchant.logo} name={merchant.name} size={64} />
+              <BrandLogo src={merchant.logo as string} name={merchant.name as string} size={64} />
               <div className="min-w-0 flex-1">
                 <BadgePill className="mb-2">Store</BadgePill>
                 <h1 className="display-sm text-ink m-0 !text-[28px] md:!text-[36px]">
-                  {merchant.name} coupons
+                  {merchant.name as string} coupons
                 </h1>
-                <p className="body-sm mt-2 line-clamp-3">{merchant.description}</p>
+                <p className="body-sm mt-2 line-clamp-3">{merchant.description as string}</p>
                 <a
-                  href={merchant.websiteUrl}
+                  href={merchant.websiteUrl as string}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-block mt-4"
                 >
-                  <ButtonPrimary type="button">Shop at {merchant.name}</ButtonPrimary>
+                  <ButtonPrimary type="button">Shop at {merchant.name as string}</ButtonPrimary>
                 </a>
               </div>
             </div>
@@ -340,8 +323,8 @@ export default async function MerchantPage({
                   href={`/${s.slug}`}
                   className="flex items-center gap-2 py-1.5 text-sm font-medium hover:text-fin-orange"
                 >
-                  <BrandLogo src={s.logo} name={s.name} size={28} />
-                  {s.name}
+                  <BrandLogo src={s.logo as string} name={s.name as string} size={28} />
+                  {s.name as string}
                 </Link>
               ))}
             </div>
@@ -356,7 +339,7 @@ export default async function MerchantPage({
                   href={`/category/${c.slug}`}
                   className="caption-strong px-2.5 py-1 rounded-md bg-surface-2 hover:bg-hairline"
                 >
-                  {c.name}
+                  {c.name as string}
                 </Link>
               ))}
             </div>

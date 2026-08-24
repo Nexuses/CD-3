@@ -1,35 +1,51 @@
-import { prisma } from "@/lib/prisma";
+import { connectDB } from "@/lib/mongodb";
+import { Category, Merchant, Offer } from "@/lib/models";
+import { mapId, withId } from "@/lib/serialize";
 import { SiteHeader } from "@/components/header";
 import { SiteFooter } from "@/components/footer";
 
 export const dynamic = "force-dynamic";
 
 async function getNavData() {
+  await connectDB();
   const [categories, merchants] = await Promise.all([
-    prisma.category.findMany({
-      where: { parentId: null },
-      orderBy: { name: "asc" },
-      include: { _count: { select: { offers: true } } },
-    }),
-    prisma.merchant.findMany({
-      where: { isActive: true },
-      orderBy: [{ isFeatured: "desc" }, { name: "asc" }],
-      take: 12,
-      include: {
-        _count: { select: { offers: { where: { isActive: true } } } },
-      },
-    }),
+    Category.find({ parentId: null }).sort({ name: 1 }).lean(),
+    Merchant.find({ isActive: true }).sort({ isFeatured: -1, name: 1 }).limit(12).lean(),
   ]);
 
+  const merchantIds = merchants.map((m) => m._id);
+  const offerCounts = await Offer.aggregate([
+    { $match: { isActive: true, merchantId: { $in: merchantIds } } },
+    { $group: { _id: "$merchantId", count: { $sum: 1 } } },
+  ]);
+  const countMap = new Map(offerCounts.map((r) => [String(r._id), r.count as number]));
+
+  const catIds = categories.map((c) => c._id);
+  const catCounts = await Offer.aggregate([
+    { $match: { isActive: true, categoryIds: { $in: catIds } } },
+    { $unwind: "$categoryIds" },
+    { $match: { categoryIds: { $in: catIds } } },
+    { $group: { _id: "$categoryIds", count: { $sum: 1 } } },
+  ]);
+  const catCountMap = new Map(catCounts.map((r) => [String(r._id), r.count as number]));
+
   return {
-    categories,
-    topStores: merchants.map((m) => ({
-      id: m.id,
-      slug: m.slug,
-      name: m.name,
-      logo: m.logo,
-      offerCount: m._count.offers,
+    categories: mapId(categories).map((c) => ({
+      id: c.id,
+      slug: String(c.slug),
+      name: String(c.name),
+      _count: { offers: catCountMap.get(c.id) || 0 },
     })),
+    topStores: merchants.map((m) => {
+      const row = withId(m)!;
+      return {
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        logo: row.logo,
+        offerCount: countMap.get(String(m._id)) || 0,
+      };
+    }),
   };
 }
 

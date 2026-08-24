@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { connectDB } from "@/lib/mongodb";
+import { Category, Merchant, Offer } from "@/lib/models";
+import { mapId, offerShape, withId } from "@/lib/serialize";
 import { StoreTile } from "@/components/store-tile";
 import { OfferCardCompact } from "@/components/offer-card";
 import {
@@ -20,35 +22,41 @@ import {
 } from "@/lib/home-banners";
 
 export default async function HomePage() {
-  const [merchants, categories, todaysOffers, exclusiveOffers] = await Promise.all([
-    prisma.merchant.findMany({
-      where: { isActive: true },
-      orderBy: [{ isFeatured: "desc" }, { name: "asc" }],
-      include: {
-        offers: { where: { isActive: true }, select: { type: true } },
-      },
-    }),
-    prisma.category.findMany({
-      where: { parentId: null },
-      orderBy: { name: "asc" },
-    }),
-    prisma.offer.findMany({
-      where: { isActive: true },
-      orderBy: { clickCount: "desc" },
-      take: 8,
-      include: {
-        merchant: { select: { id: true, slug: true, name: true, logo: true } },
-      },
-    }),
-    prisma.offer.findMany({
-      where: { isActive: true, isExclusive: true },
-      orderBy: { clickCount: "desc" },
-      take: 4,
-      include: {
-        merchant: { select: { id: true, slug: true, name: true, logo: true } },
-      },
-    }),
+  await connectDB();
+  const [merchantDocs, categoryDocs, todayDocs, exclusiveDocs] = await Promise.all([
+    Merchant.find({ isActive: true }).sort({ isFeatured: -1, name: 1 }).lean(),
+    Category.find({ parentId: null }).sort({ name: 1 }).lean(),
+    Offer.find({ isActive: true })
+      .sort({ clickCount: -1 })
+      .limit(8)
+      .populate("merchantId", "slug name logo")
+      .lean(),
+    Offer.find({ isActive: true, isExclusive: true })
+      .sort({ clickCount: -1 })
+      .limit(4)
+      .populate("merchantId", "slug name logo")
+      .lean(),
   ]);
+
+  const offerTypeCounts = await Offer.aggregate([
+    { $match: { isActive: true } },
+    { $group: { _id: { merchantId: "$merchantId", type: "$type" }, count: { $sum: 1 } } },
+  ]);
+  const offersByMerchant = new Map<string, { type: string }[]>();
+  for (const row of offerTypeCounts) {
+    const key = String(row._id.merchantId);
+    const list = offersByMerchant.get(key) || [];
+    for (let i = 0; i < row.count; i++) list.push({ type: row._id.type });
+    offersByMerchant.set(key, list);
+  }
+
+  const merchants = merchantDocs.map((m) => ({
+    ...withId(m)!,
+    offers: offersByMerchant.get(String(m._id)) || [],
+  }));
+  const categories = mapId(categoryDocs);
+  const todaysOffers = todayDocs.map((o) => offerShape(o));
+  const exclusiveOffers = exclusiveDocs.map((o) => offerShape(o));
 
   const favouriteStores = [
     { slug: "flipkart", name: "Flipkart", logo: "/logos/flipkart.svg" },

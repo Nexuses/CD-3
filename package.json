@@ -4,24 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "prisma generate && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
-    "postinstall": "prisma generate"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "db:reset": "tsx scripts/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "jose": "^6.2.4",
+    "mongoose": "^9.9.3",
     "next": "15.5.21",
-    "prisma": "^5.22.0",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },

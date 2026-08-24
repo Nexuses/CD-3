@@ -19,7 +19,7 @@ export function usedTodayFromClicks(clickCount: number): number {
 }
 
 export type OfferWithRelations = {
-  id: number;
+  id: string;
   type: string;
   title: string;
   subtitle: string;
@@ -29,13 +29,13 @@ export type OfferWithRelations = {
   discountLabel: string;
   isExclusive: boolean;
   clickCount: number;
-  expiryDate: Date | null;
+  expiryDate: string | null;
   merchant: {
-    id: number;
+    id: string;
     slug: string;
     name: string;
     logo: string;
   };
   bankTags?: { tagName: string }[];
-  categories?: { category: { id: number; slug: string; name: string } }[];
+  categories?: { category: { id: string; slug: string; name: string } }[];
 };

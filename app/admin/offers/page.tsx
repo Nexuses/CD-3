@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { connectDB } from "@/lib/mongodb";
+import { Merchant, Offer } from "@/lib/models";
+import { asObjectId, mapId, offerShape } from "@/lib/serialize";
 import { FeatureCard, ButtonPrimary } from "@/components/ui";
 import { DeleteButton } from "@/components/delete-button";
 
@@ -14,20 +16,35 @@ export default async function AdminOffersPage({
   if (!session) redirect("/admin/login");
   const sp = await searchParams;
 
-  const merchants = await prisma.merchant.findMany({
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  await connectDB();
+  const merchants = mapId(
+    await Merchant.find().sort({ name: 1 }).select("name").lean(),
+  ).map((m) => ({ id: m.id, name: m.name as string }));
 
-  const offers = await prisma.offer.findMany({
-    where: {
-      ...(sp.store ? { merchantId: Number(sp.store) } : {}),
-      ...(sp.type === "coupon" || sp.type === "deal" ? { type: sp.type } : {}),
-      ...(sp.status === "active" ? { isActive: true } : {}),
-      ...(sp.status === "inactive" ? { isActive: false } : {}),
-    },
-    orderBy: { updatedAt: "desc" },
-    include: { merchant: { select: { name: true } } },
+  const filter: Record<string, unknown> = {};
+  if (sp.store) {
+    const oid = asObjectId(sp.store);
+    if (oid) filter.merchantId = oid;
+  }
+  if (sp.type === "coupon" || sp.type === "deal") filter.type = sp.type;
+  if (sp.status === "active") filter.isActive = true;
+  if (sp.status === "inactive") filter.isActive = false;
+
+  const offerDocs = await Offer.find(filter)
+    .sort({ updatedAt: -1 })
+    .populate("merchantId", "name")
+    .lean();
+  const offers = offerDocs.map((o) => {
+    const shaped = offerShape(o);
+    return {
+      id: shaped.id,
+      title: shaped.title,
+      type: shaped.type,
+      discountLabel: shaped.discountLabel,
+      clickCount: shaped.clickCount,
+      isActive: shaped.isActive,
+      merchant: { name: shaped.merchant?.name || "" },
+    };
   });
 
   function href(overrides: Record<string, string | undefined>) {
@@ -59,9 +76,9 @@ export default async function AdminOffersPage({
         {merchants.slice(0, 8).map((m) => (
           <Link
             key={m.id}
-            href={href({ store: String(m.id) })}
+            href={href({ store: m.id })}
             className={`nav-link rounded-full px-3 py-1.5 ${
-              sp.store === String(m.id) ? "bg-primary text-on-primary" : "bg-surface-strong"
+              sp.store === m.id ? "bg-primary text-on-primary" : "bg-surface-strong"
             }`}
           >
             {m.name}

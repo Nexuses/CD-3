@@ -7,7 +7,7 @@ import { FeatureCard, ButtonPrimary } from "@/components/ui";
 import { slugify } from "@/lib/utils";
 
 type StoreFormData = {
-  id?: number;
+  id?: string;
   name: string;
   slug: string;
   logo: string;

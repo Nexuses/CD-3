@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { connectDB } from "@/lib/mongodb";
+import { Category, Merchant, Offer } from "@/lib/models";
+import { offerCountsByCategory } from "@/lib/db-helpers";
+import { mapId } from "@/lib/serialize";
 import { StoreTile } from "@/components/store-tile";
 import { BadgePill, ButtonPrimary, FeatureCard } from "@/components/ui";
 
@@ -20,54 +23,70 @@ export default async function StoresPage({
   const categorySlug = sp.category || "";
   const bank = sp.bank || "";
 
-  const categories = await prisma.category.findMany({
-    where: { parentId: null },
-    orderBy: { name: "asc" },
-    include: { _count: { select: { offers: true } } },
-  });
+  await connectDB();
 
-  const merchants = await prisma.merchant.findMany({
-    where: {
-      isActive: true,
-      ...(q ? { OR: [{ name: { contains: q } }, { slug: { contains: q } }] } : {}),
-      ...(categorySlug
-        ? {
-            offers: {
-              some: {
-                isActive: true,
-                categories: { some: { category: { slug: categorySlug } } },
-              },
-            },
-          }
-        : {}),
-      ...(bank
-        ? {
-            offers: {
-              some: {
-                isActive: true,
-                bankTags: { some: { tagName: bank } },
-              },
-            },
-          }
-        : {}),
-    },
-    orderBy: { name: "asc" },
-    include: {
-      offers: { where: { isActive: true }, select: { type: true } },
-    },
-  });
+  const [categoryDocs, offerCounts] = await Promise.all([
+    Category.find({ parentId: null }).sort({ name: 1 }).lean(),
+    offerCountsByCategory(true),
+  ]);
+  const categories = mapId(categoryDocs).map((c) => ({
+    ...c,
+    _count: { offers: offerCounts.get(c.id) || 0 },
+  }));
+
+  let merchantFilter: Record<string, unknown> = { isActive: true };
+  if (q) {
+    merchantFilter = {
+      ...merchantFilter,
+      $or: [
+        { name: { $regex: q, $options: "i" } },
+        { slug: { $regex: q, $options: "i" } },
+      ],
+    };
+  }
+
+  const offerFilter: Record<string, unknown> = { isActive: true };
+  if (categorySlug) {
+    const cat = await Category.findOne({ slug: categorySlug }).select("_id").lean();
+    if (cat) offerFilter.categoryIds = cat._id;
+  }
+  if (bank) offerFilter.bankTags = bank;
+
+  if (categorySlug || bank) {
+    const merchantIds = await Offer.distinct("merchantId", offerFilter);
+    merchantFilter._id = { $in: merchantIds };
+  }
+
+  const merchantDocs = await Merchant.find(merchantFilter).sort({ name: 1 }).lean();
+  const merchantIds = merchantDocs.map((m) => m._id);
+  const offerTypeRows = await Offer.aggregate([
+    { $match: { isActive: true, merchantId: { $in: merchantIds } } },
+    { $group: { _id: { merchantId: "$merchantId", type: "$type" }, count: { $sum: 1 } } },
+  ]);
+  const offersByMerchant = new Map<string, { type: string }[]>();
+  for (const row of offerTypeRows) {
+    const key = String(row._id.merchantId);
+    const list = offersByMerchant.get(key) || [];
+    for (let i = 0; i < row.count; i++) list.push({ type: row._id.type });
+    offersByMerchant.set(key, list);
+  }
+
+  const merchants = mapId(merchantDocs).map((m) => ({
+    ...m,
+    offers: offersByMerchant.get(m.id) || [],
+  }));
 
   const filtered = merchants.filter((m) => {
     if (letter === "ALL") return true;
-    const first = m.name.charAt(0).toUpperCase();
+    const first = (m.name as string).charAt(0).toUpperCase();
     if (letter === "#") return !/[A-Z]/.test(first);
     return first === letter;
   });
 
   const grouped = new Map<string, typeof filtered>();
   for (const m of filtered) {
-    const key = /[A-Z]/i.test(m.name.charAt(0))
-      ? m.name.charAt(0).toUpperCase()
+    const key = /[A-Z]/i.test((m.name as string).charAt(0))
+      ? (m.name as string).charAt(0).toUpperCase()
       : "#";
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)!.push(m);
@@ -120,7 +139,7 @@ export default async function StoresPage({
                 <li key={c.id}>
                   <Link
                     href={href({
-                      category: categorySlug === c.slug ? undefined : c.slug,
+                      category: categorySlug === c.slug ? undefined : (c.slug as string),
                     })}
                     className={`flex items-center gap-2 text-sm px-2 py-2 rounded-md ${
                       categorySlug === c.slug
@@ -128,7 +147,7 @@ export default async function StoresPage({
                         : "text-ink-muted hover:bg-canvas hover:text-ink"
                     }`}
                   >
-                    {c.name}
+                    {c.name as string}
                     <span className="ml-auto number-display text-xs text-muted">
                       {c._count.offers}
                     </span>
@@ -185,9 +204,9 @@ export default async function StoresPage({
                       return (
                         <StoreTile
                           key={m.id}
-                          slug={m.slug}
-                          name={m.name}
-                          logo={m.logo}
+                          slug={m.slug as string}
+                          name={m.name as string}
+                          logo={m.logo as string}
                           offerCount={m.offers.length}
                           couponCount={coupons}
                           dealCount={deals}

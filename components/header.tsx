@@ -6,8 +6,8 @@ import { FormEvent, useState } from "react";
 import { LogoMark, ButtonPrimary, ButtonSecondary } from "./ui";
 import { BrandLogo } from "./store-tile";
 
-type Cat = { id: number; slug: string; name: string; _count?: { offers: number } };
-type Store = { id: number; slug: string; name: string; logo: string; offerCount: number };
+type Cat = { id: string; slug: string; name: string; _count?: { offers: number } };
+type Store = { id: string; slug: string; name: string; logo: string; offerCount: number };
 
 export function SiteHeader({
   categories,

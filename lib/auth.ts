@@ -1,7 +1,9 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
-import { prisma } from "./prisma";
+import { connectDB } from "./mongodb";
+import { Admin } from "./models";
+import { idOf } from "./serialize";
 
 const COOKIE_NAME = "cc_admin_session";
 
@@ -10,7 +12,7 @@ function getSecret() {
   return new TextEncoder().encode(secret);
 }
 
-export async function createSession(adminId: number, username: string) {
+export async function createSession(adminId: string, username: string) {
   const token = await new SignJWT({ adminId, username })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -33,7 +35,7 @@ export async function destroySession() {
 }
 
 export async function getSession(): Promise<{
-  adminId: number;
+  adminId: string;
   username: string;
 } | null> {
   const cookieStore = await cookies();
@@ -41,7 +43,7 @@ export async function getSession(): Promise<{
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, getSecret());
-    if (typeof payload.adminId !== "number" || typeof payload.username !== "string") {
+    if (typeof payload.adminId !== "string" || typeof payload.username !== "string") {
       return null;
     }
     return { adminId: payload.adminId, username: payload.username };
@@ -57,11 +59,12 @@ export async function requireAdmin() {
 }
 
 export async function verifyAdminCredentials(username: string, password: string) {
-  const admin = await prisma.admin.findUnique({ where: { username } });
+  await connectDB();
+  const admin = await Admin.findOne({ username }).lean();
   if (!admin) return null;
   const ok = await bcrypt.compare(password, admin.passwordHash);
   if (!ok) return null;
-  return admin;
+  return { ...admin, id: idOf(admin._id) };
 }
 
 export { COOKIE_NAME };

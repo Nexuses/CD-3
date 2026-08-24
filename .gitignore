@@ -41,17 +41,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# prisma
-prisma/*.db
-prisma/*.db-journal
-
-/app/generated/prisma
-
 # local db provisioning leftovers
 .create-db.json
 .db-url.tmp
 .db-claim.txt
 
-# duplicate local copy — deploy from repo root, not this folder
+# duplicate local copies — deploy from repo root, not these folders
 /new CD/
+/new-2/
 new CD.zip

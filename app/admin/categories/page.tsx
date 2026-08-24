@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { connectDB } from "@/lib/mongodb";
+import { Category } from "@/lib/models";
+import { offerCountsByCategory } from "@/lib/db-helpers";
+import { mapId } from "@/lib/serialize";
 import { FeatureCard, ButtonPrimary } from "@/components/ui";
 import { DeleteButton } from "@/components/delete-button";
 
@@ -9,13 +12,21 @@ export default async function AdminCategoriesPage() {
   const session = await getSession();
   if (!session) redirect("/admin/login");
 
-  const categories = await prisma.category.findMany({
-    orderBy: { name: "asc" },
-    include: {
-      parent: { select: { name: true } },
-      _count: { select: { offers: true } },
-    },
-  });
+  await connectDB();
+  const [categoryDocs, offerCounts] = await Promise.all([
+    Category.find().sort({ name: 1 }).lean(),
+    offerCountsByCategory(),
+  ]);
+  const parentIds = categoryDocs.map((c) => c.parentId).filter(Boolean);
+  const parents = await Category.find({ _id: { $in: parentIds } })
+    .select("name")
+    .lean();
+  const parentMap = new Map(parents.map((p) => [String(p._id), p.name]));
+  const categories = mapId(categoryDocs).map((c) => ({
+    ...c,
+    parent: c.parentId ? { name: parentMap.get(c.parentId) || "" } : null,
+    _count: { offers: offerCounts.get(c.id) || 0 },
+  }));
 
   return (
     <div className="space-y-6">
