@@ -1,5 +1,7 @@
 import localFont from "next/font/local";
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { NavigationProgress } from "@/components/navigation-progress";
 import "./globals.css";
 
 const inter = localFont({
@@ -18,8 +20,8 @@ const jetbrains = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "CouponChrome — Best Coupons & Deals for Online Shopping",
-    template: "%s | CouponChrome",
+    default: "Clicks 4 Coupon — Best Coupons & Deals for Online Shopping",
+    template: "%s | Clicks 4 Coupon",
   },
   description:
     "Find verified coupons, promo codes, and deals for Amazon, Flipkart, Myntra, and more. Save money on every purchase.",
@@ -35,6 +37,9 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${jetbrains.variable} min-h-screen flex flex-col antialiased font-sans`}
       >
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         {children}
       </body>
     </html>

@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { connectDB } from "@/lib/mongodb";
-import { Category, Merchant, Offer } from "@/lib/models";
-import { mapId, offerShape, withId } from "@/lib/serialize";
+import { getHomePageContent } from "@/lib/home-content";
+import { getHomePageListingData } from "@/lib/site-data";
 import { StoreTile } from "@/components/store-tile";
 import { OfferCardCompact } from "@/components/offer-card";
 import {
@@ -13,50 +12,15 @@ import { HomeCategoryRow } from "@/components/home/home-category-row";
 import { FeaturedSpotlight } from "@/components/home/featured-spotlight";
 import { DealsOfTheWeek } from "@/components/home/deals-of-the-week";
 import { RecommendedNewLaunch } from "@/components/home/recommended-new-launch";
-import {
-  DEAL_BANNERS,
-  HERO_SLIDES,
-  HOME_CATEGORIES,
-  RECOMMENDED_CARDS,
-  SPOTLIGHT_COUPONS,
-} from "@/lib/home-banners";
+import { RECOMMENDED_CARDS } from "@/lib/home-defaults";
+
+export const revalidate = 300;
 
 export default async function HomePage() {
-  await connectDB();
-  const [merchantDocs, categoryDocs, todayDocs, exclusiveDocs] = await Promise.all([
-    Merchant.find({ isActive: true }).sort({ isFeatured: -1, name: 1 }).lean(),
-    Category.find({ parentId: null }).sort({ name: 1 }).lean(),
-    Offer.find({ isActive: true })
-      .sort({ clickCount: -1 })
-      .limit(8)
-      .populate("merchantId", "slug name logo")
-      .lean(),
-    Offer.find({ isActive: true, isExclusive: true })
-      .sort({ clickCount: -1 })
-      .limit(4)
-      .populate("merchantId", "slug name logo")
-      .lean(),
-  ]);
+  const [{ heroSlides, homeCategories, spotlightCoupons, dealBanners }, listing] =
+    await Promise.all([getHomePageContent(), getHomePageListingData()]);
 
-  const offerTypeCounts = await Offer.aggregate([
-    { $match: { isActive: true } },
-    { $group: { _id: { merchantId: "$merchantId", type: "$type" }, count: { $sum: 1 } } },
-  ]);
-  const offersByMerchant = new Map<string, { type: string }[]>();
-  for (const row of offerTypeCounts) {
-    const key = String(row._id.merchantId);
-    const list = offersByMerchant.get(key) || [];
-    for (let i = 0; i < row.count; i++) list.push({ type: row._id.type });
-    offersByMerchant.set(key, list);
-  }
-
-  const merchants = merchantDocs.map((m) => ({
-    ...withId(m)!,
-    offers: offersByMerchant.get(String(m._id)) || [],
-  }));
-  const categories = mapId(categoryDocs);
-  const todaysOffers = todayDocs.map((o) => offerShape(o));
-  const exclusiveOffers = exclusiveDocs.map((o) => offerShape(o));
+  const { merchants, categories, todaysOffers, exclusiveOffers } = listing;
 
   const favouriteStores = [
     { slug: "flipkart", name: "Flipkart", logo: "/logos/flipkart.svg" },
@@ -96,7 +60,7 @@ export default async function HomePage() {
 
   const faqs = [
     {
-      q: "How do I use a coupon on CouponChrome?",
+      q: "How do I use a coupon on Clicks 4 Coupon?",
       a: "Click Get coupon, copy the code, then visit the store and paste it at checkout. For deals, click Get deal to go straight to the offer page.",
     },
     {
@@ -115,10 +79,10 @@ export default async function HomePage() {
 
   return (
     <div>
-      <HeroBannerCarousel slides={HERO_SLIDES} />
-      <HomeCategoryRow categories={HOME_CATEGORIES} />
-      <FeaturedSpotlight coupons={SPOTLIGHT_COUPONS} />
-      <DealsOfTheWeek deals={DEAL_BANNERS} />
+      <HeroBannerCarousel slides={heroSlides} />
+      <HomeCategoryRow categories={homeCategories} />
+      <FeaturedSpotlight coupons={spotlightCoupons} />
+      <DealsOfTheWeek deals={dealBanners} />
       <RecommendedNewLaunch cards={RECOMMENDED_CARDS} />
 
       {/* Favourite stores — Flipkart, Amazon, Myntra, AJIO + more */}
@@ -185,7 +149,7 @@ export default async function HomePage() {
         <div className="max-w-[1280px] mx-auto px-4">
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <BadgePill>Today&apos;s best offers</BadgePill>
-            <BadgePill accent>CC Exclusive</BadgePill>
+            <BadgePill accent>C4C Exclusive</BadgePill>
           </div>
           <h2 className="display-sm text-ink m-0 mb-8">Top online shopping offers</h2>
           <div className="flex gap-4 overflow-x-auto no-scrollbar pb-1">
@@ -247,7 +211,7 @@ export default async function HomePage() {
       <section className="section-band bg-surface-2">
         <div className="max-w-[1280px] mx-auto px-4 grid md:grid-cols-2 gap-5">
           <FeatureCard>
-            <BadgePill className="mb-4">Why CouponChrome</BadgePill>
+            <BadgePill className="mb-4">Why Clicks 4 Coupon</BadgePill>
             <h2 className="display-sm text-ink m-0 mb-4">Built for real savings</h2>
             <ul className="body-md space-y-2 list-disc pl-5 mb-6">
               <li>Latest verified coupons & deals across top brands</li>

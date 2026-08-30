@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { connectDB } from "@/lib/mongodb";
-import { Category, Merchant, Offer } from "@/lib/models";
-import { mapId, offerShape, withId } from "@/lib/serialize";
 import { OfferCard } from "@/components/offer-card";
 import { OfferTabs } from "@/components/offer-tabs";
 import { BadgePill, ButtonPrimary, FeatureCard } from "@/components/ui";
 import { BrandLogo } from "@/components/store-tile";
 import { StoreCouponBanner } from "@/components/store-coupon-banner";
+import { getMerchantMetadata, getMerchantPageData } from "@/lib/site-data";
 
 const RESERVED = new Set([
   "stores",
@@ -24,6 +22,8 @@ const RESERVED = new Set([
   "favicon.ico",
 ]);
 
+export const revalidate = 300;
+
 export async function generateMetadata({
   params,
 }: {
@@ -31,8 +31,7 @@ export async function generateMetadata({
 }) {
   const { slug } = await params;
   if (RESERVED.has(slug)) return { title: "Not Found" };
-  await connectDB();
-  const m = await Merchant.findOne({ slug }).lean();
+  const m = await getMerchantMetadata(slug);
   if (!m) return { title: "Store" };
   return {
     title: m.seoTitle || `${m.name} Coupons & Offers`,
@@ -52,114 +51,32 @@ export default async function MerchantPage({
 
   if (RESERVED.has(slug)) notFound();
 
-  await connectDB();
-  const merchantDoc = await Merchant.findOne({ slug, isActive: true }).lean();
-  if (!merchantDoc) notFound();
-  const merchant = withId(merchantDoc)!;
-
-  const typeFilter = sp.type === "coupon" || sp.type === "deal" ? sp.type : undefined;
+  const typeFilter = sp.type === "coupon" || sp.type === "deal" ? sp.type : "";
   const categorySlug = sp.category || "";
   const bank = sp.bank || "";
 
-  const filter: Record<string, unknown> = {
-    merchantId: merchantDoc._id,
-    isActive: true,
-  };
-  if (typeFilter) filter.type = typeFilter;
-  if (bank) filter.bankTags = bank;
-  if (categorySlug) {
-    const cat = await Category.findOne({ slug: categorySlug }).select("_id").lean();
-    if (cat) filter.categoryIds = cat._id;
-  }
+  const data = await getMerchantPageData(slug, typeFilter, categorySlug, bank);
+  if (!data) notFound();
 
-  const [offerDocs, allCount, couponCount, dealCount, allOffersForFilters, otherStoreDocs, topCategoryDocs] =
-    await Promise.all([
-      Offer.find(filter)
-        .sort({ clickCount: -1 })
-        .populate("merchantId", "slug name logo")
-        .populate("categoryIds", "slug name")
-        .lean(),
-      Offer.countDocuments({ merchantId: merchantDoc._id, isActive: true }),
-      Offer.countDocuments({ merchantId: merchantDoc._id, isActive: true, type: "coupon" }),
-      Offer.countDocuments({ merchantId: merchantDoc._id, isActive: true, type: "deal" }),
-      Offer.find({ merchantId: merchantDoc._id, isActive: true })
-        .populate("categoryIds", "slug name")
-        .lean(),
-      Merchant.find({ isActive: true, _id: { $ne: merchantDoc._id } })
-        .sort({ name: 1 })
-        .limit(6)
-        .lean(),
-      Category.find({ parentId: null }).sort({ name: 1 }).limit(8).lean(),
-    ]);
-
-  const offers = offerDocs.map((o) => offerShape(o));
-
-  const catCounts = new Map<string, { slug: string; name: string; count: number }>();
-  const bankCounts = new Map<string, number>();
-  for (const o of allOffersForFilters) {
-    const cats = Array.isArray(o.categoryIds) ? o.categoryIds : [];
-    for (const c of cats) {
-      if (!c || typeof c !== "object" || !("_id" in c)) continue;
-      const cat = c as { slug: string; name: string };
-      const prev = catCounts.get(cat.slug);
-      if (prev) prev.count += 1;
-      else catCounts.set(cat.slug, { slug: cat.slug, name: cat.name, count: 1 });
-    }
-    for (const tag of o.bankTags || []) {
-      bankCounts.set(tag, (bankCounts.get(tag) || 0) + 1);
-    }
-  }
-
-  const totalUses = allOffersForFilters.reduce((s, o) => s + o.clickCount, 0);
-  const merchantInfo = {
-    id: merchant.id,
-    slug: merchant.slug as string,
-    name: merchant.name as string,
-    logo: merchant.logo as string,
-  };
-
-  const bannerOffers = [...allOffersForFilters]
-    .filter((o) => o.type === "coupon")
-    .sort((a, b) => b.clickCount - a.clickCount)
-    .slice(0, 3)
-    .map((o) => ({
-      id: String(o._id),
-      type: o.type,
-      title: o.title,
-      subtitle: o.subtitle,
-      couponCode: o.couponCode,
-      affiliateUrl: o.affiliateUrl,
-      discountLabel: o.discountLabel,
-      isExclusive: o.isExclusive,
-      merchant: merchantInfo,
-    }));
-
-  if (bannerOffers.length < 3) {
-    const extras = [...allOffersForFilters]
-      .sort((a, b) => b.clickCount - a.clickCount)
-      .filter((o) => !bannerOffers.some((b) => b.id === String(o._id)))
-      .slice(0, 3 - bannerOffers.length)
-      .map((o) => ({
-        id: String(o._id),
-        type: o.type,
-        title: o.title,
-        subtitle: o.subtitle,
-        couponCode: o.couponCode,
-        affiliateUrl: o.affiliateUrl,
-        discountLabel: o.discountLabel,
-        isExclusive: o.isExclusive,
-        merchant: merchantInfo,
-      }));
-    bannerOffers.push(...extras);
-  }
-
-  const otherStores = mapId(otherStoreDocs);
-  const topCategories = mapId(topCategoryDocs);
+  const {
+    merchant,
+    offers,
+    allCount,
+    couponCount,
+    dealCount,
+    totalUses,
+    bannerOffers,
+    catCounts,
+    bankCounts,
+    otherStores,
+    topCategories,
+    activeTypeFilter,
+  } = data;
 
   function filterHref(overrides: Record<string, string | undefined>) {
     const params = new URLSearchParams();
     const next = {
-      type: typeFilter,
+      type: activeTypeFilter,
       category: categorySlug || undefined,
       bank: bank || undefined,
       ...overrides,
@@ -200,11 +117,11 @@ export default async function MerchantPage({
               </Link>
             </div>
 
-            {bankCounts.size > 0 && (
+            {bankCounts.length > 0 && (
               <div className="mb-4">
                 <p className="caption-strong text-ink-subtle mb-2">Bank & wallet</p>
                 <ul className="space-y-1">
-                  {[...bankCounts.entries()].map(([tag, count]) => (
+                  {bankCounts.map(([tag, count]) => (
                     <li key={tag}>
                       <Link
                         href={filterHref({ bank: bank === tag ? undefined : tag })}
@@ -225,11 +142,11 @@ export default async function MerchantPage({
               </div>
             )}
 
-            {catCounts.size > 0 && (
+            {catCounts.length > 0 && (
               <div>
                 <p className="caption-strong text-ink-subtle mb-2">Categories</p>
                 <ul className="space-y-1">
-                  {[...catCounts.values()].map((c) => (
+                  {catCounts.map((c) => (
                     <li key={c.slug}>
                       <Link
                         href={filterHref({
@@ -278,7 +195,7 @@ export default async function MerchantPage({
 
           <OfferTabs
             basePath={`/${slug}`}
-            active={typeFilter || "all"}
+            active={activeTypeFilter || "all"}
             counts={{ all: allCount, coupon: couponCount, deal: dealCount }}
           />
 

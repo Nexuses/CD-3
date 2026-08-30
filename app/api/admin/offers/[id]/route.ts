@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import { Offer } from "@/lib/models";
 import { asObjectId, offerShape } from "@/lib/serialize";
+import { revalidateSiteCache } from "@/lib/revalidate-site";
 
 function parseCategoryIds(body: { categoryIds?: unknown }) {
   if (!Array.isArray(body.categoryIds)) return [];
@@ -78,6 +79,7 @@ export async function PUT(
     { new: true },
   ).lean();
   if (!offer) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateSiteCache();
   return NextResponse.json(offerShape(offer));
 }
 
@@ -91,5 +93,6 @@ export async function DELETE(
   if (!oid) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   const result = await Offer.findByIdAndDelete(oid);
   if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateSiteCache();
   return NextResponse.json({ ok: true });
 }

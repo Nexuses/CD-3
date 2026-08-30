@@ -5,6 +5,7 @@ import { Merchant } from "@/lib/models";
 import { offerCountsByMerchant } from "@/lib/db-helpers";
 import { mapId, withId } from "@/lib/serialize";
 import { slugify } from "@/lib/utils";
+import { revalidateSiteCache } from "@/lib/revalidate-site";
 
 async function guard() {
   const session = await getSession();
@@ -48,5 +49,6 @@ export async function POST(req: Request) {
     isActive: body.isActive !== false,
     isFeatured: Boolean(body.isFeatured),
   });
+  revalidateSiteCache();
   return NextResponse.json(withId(store.toObject()), { status: 201 });
 }

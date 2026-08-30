@@ -8,7 +8,7 @@ export default function ContactPage() {
     <StaticPage title="Contact Us">
       <p>
         Questions about an offer, partnership, or the admin demo? Email{" "}
-        <strong className="text-ink">hello@couponchrome.demo</strong> (placeholder for
+        <strong className="text-ink">hello@clicks4coupon.demo</strong> (placeholder for
         this demo build).
       </p>
       <p>

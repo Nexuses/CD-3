@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/mongodb";
 import { Merchant } from "@/lib/models";
 import { asObjectId, withId } from "@/lib/serialize";
 import { slugify } from "@/lib/utils";
+import { revalidateSiteCache } from "@/lib/revalidate-site";
 
 async function guard() {
   return getSession();
@@ -56,6 +57,7 @@ export async function PUT(
     { new: true },
   ).lean();
   if (!store) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateSiteCache();
   return NextResponse.json(withId(store));
 }
 
@@ -69,5 +71,6 @@ export async function DELETE(
   if (!oid) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   const result = await Merchant.findByIdAndDelete(oid);
   if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateSiteCache();
   return NextResponse.json({ ok: true });
 }

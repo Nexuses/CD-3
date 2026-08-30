@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { connectDB } from "@/lib/mongodb";
-import { Category, Merchant, Offer } from "@/lib/models";
-import { offerCountsByCategory } from "@/lib/db-helpers";
-import { mapId } from "@/lib/serialize";
+import { Category, Offer } from "@/lib/models";
+import { searchSite } from "@/lib/search";
+import { getStoresDirectoryData } from "@/lib/site-data";
+import { OfferCard } from "@/components/offer-card";
 import { StoreTile } from "@/components/store-tile";
 import { BadgePill, ButtonPrimary, FeatureCard } from "@/components/ui";
 
@@ -10,93 +11,84 @@ export const metadata = {
   title: "All Stores Coupons & Offers",
 };
 
+export const revalidate = 300;
+
 const LETTERS = ["ALL", "#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")];
+
+function readQueryParam(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0] || "";
+  return value || "";
+}
 
 export default async function StoresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; letter?: string; category?: string; bank?: string }>;
+  searchParams: Promise<{ q?: string | string[]; letter?: string; category?: string; bank?: string }>;
 }) {
   const sp = await searchParams;
-  const q = (sp.q || "").trim().toLowerCase();
+  const q = readQueryParam(sp.q).trim();
   const letter = (sp.letter || "ALL").toUpperCase();
   const categorySlug = sp.category || "";
   const bank = sp.bank || "";
+  const isSearch = q.length > 0;
 
-  await connectDB();
+  let categories: Awaited<ReturnType<typeof getStoresDirectoryData>>["categories"];
+  let merchants: Awaited<ReturnType<typeof getStoresDirectoryData>>["merchants"];
+  let searchOffers: Awaited<ReturnType<typeof searchSite>>["offers"] = [];
+  let searchCategories: Awaited<ReturnType<typeof searchSite>>["categories"] = [];
 
-  const [categoryDocs, offerCounts] = await Promise.all([
-    Category.find({ parentId: null }).sort({ name: 1 }).lean(),
-    offerCountsByCategory(true),
-  ]);
-  const categories = mapId(categoryDocs).map((c) => ({
-    ...c,
-    _count: { offers: offerCounts.get(c.id) || 0 },
-  }));
+  if (isSearch) {
+    const results = await searchSite(q);
+    merchants = results.merchants;
+    searchCategories = results.categories;
+    searchOffers = results.offers;
+    const directory = await getStoresDirectoryData();
+    categories = directory.categories;
+  } else if (categorySlug || bank) {
+    await connectDB();
+    const directory = await getStoresDirectoryData();
+    categories = directory.categories;
 
-  let merchantFilter: Record<string, unknown> = { isActive: true };
-  if (q) {
-    merchantFilter = {
-      ...merchantFilter,
-      $or: [
-        { name: { $regex: q, $options: "i" } },
-        { slug: { $regex: q, $options: "i" } },
-      ],
-    };
-  }
+    const offerFilter: Record<string, unknown> = { isActive: true };
+    if (categorySlug) {
+      const cat = await Category.findOne({ slug: categorySlug }).select("_id").lean();
+      if (cat) offerFilter.categoryIds = cat._id;
+    }
+    if (bank) offerFilter.bankTags = bank;
 
-  const offerFilter: Record<string, unknown> = { isActive: true };
-  if (categorySlug) {
-    const cat = await Category.findOne({ slug: categorySlug }).select("_id").lean();
-    if (cat) offerFilter.categoryIds = cat._id;
-  }
-  if (bank) offerFilter.bankTags = bank;
-
-  if (categorySlug || bank) {
     const merchantIds = await Offer.distinct("merchantId", offerFilter);
-    merchantFilter._id = { $in: merchantIds };
+    const allowed = new Set(merchantIds.map((id) => String(id)));
+    merchants = directory.merchants.filter((m) => allowed.has(m.id));
+  } else {
+    ({ categories, merchants } = await getStoresDirectoryData());
   }
 
-  const merchantDocs = await Merchant.find(merchantFilter).sort({ name: 1 }).lean();
-  const merchantIds = merchantDocs.map((m) => m._id);
-  const offerTypeRows = await Offer.aggregate([
-    { $match: { isActive: true, merchantId: { $in: merchantIds } } },
-    { $group: { _id: { merchantId: "$merchantId", type: "$type" }, count: { $sum: 1 } } },
-  ]);
-  const offersByMerchant = new Map<string, { type: string }[]>();
-  for (const row of offerTypeRows) {
-    const key = String(row._id.merchantId);
-    const list = offersByMerchant.get(key) || [];
-    for (let i = 0; i < row.count; i++) list.push({ type: row._id.type });
-    offersByMerchant.set(key, list);
-  }
-
-  const merchants = mapId(merchantDocs).map((m) => ({
-    ...m,
-    offers: offersByMerchant.get(m.id) || [],
-  }));
-
-  const filtered = merchants.filter((m) => {
-    if (letter === "ALL") return true;
-    const first = (m.name as string).charAt(0).toUpperCase();
-    if (letter === "#") return !/[A-Z]/.test(first);
-    return first === letter;
-  });
+  const filtered = isSearch
+    ? merchants
+    : merchants.filter((m) => {
+        if (letter === "ALL") return true;
+        const first = String(m.name).charAt(0).toUpperCase();
+        if (letter === "#") return !/[A-Z]/.test(first);
+        return first === letter;
+      });
 
   const grouped = new Map<string, typeof filtered>();
   for (const m of filtered) {
-    const key = /[A-Z]/i.test((m.name as string).charAt(0))
-      ? (m.name as string).charAt(0).toUpperCase()
+    const key = /[A-Z]/i.test(String(m.name).charAt(0))
+      ? String(m.name).charAt(0).toUpperCase()
       : "#";
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)!.push(m);
   }
 
+  const hasSearchResults =
+    isSearch && (searchCategories.length > 0 || filtered.length > 0 || searchOffers.length > 0);
+
   function href(overrides: Record<string, string | undefined>) {
     const params = new URLSearchParams();
     const next = {
-      q: sp.q,
-      letter: letter === "ALL" ? undefined : letter,
+      q: q || undefined,
+      letter: !isSearch && letter !== "ALL" ? letter : undefined,
       category: categorySlug || undefined,
       bank: bank || undefined,
       ...overrides,
@@ -111,11 +103,25 @@ export default async function StoresPage({
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-10 md:py-16">
       <BadgePill className="mb-3">Directory</BadgePill>
-      <h1 className="display-sm text-ink m-0 mb-2">All stores</h1>
+      <h1 className="display-sm text-ink m-0 mb-2">
+        {isSearch ? "Search results" : "All stores"}
+      </h1>
       <p className="body-md mb-8 max-w-xl">
-        Browse coupons and deals alphabetically or filter by category.
+        {isSearch
+          ? "Stores, categories, and offers matching your search."
+          : "Browse coupons and deals alphabetically or filter by category."}
       </p>
-      {bank && (
+
+      {isSearch && (
+        <p className="body-sm mb-4">
+          Showing results for <strong className="text-ink">&ldquo;{q}&rdquo;</strong>.{" "}
+          <Link href="/stores" className="text-fin-orange font-medium">
+            Clear search
+          </Link>
+        </p>
+      )}
+
+      {bank && !isSearch && (
         <p className="body-sm mb-4">
           Showing stores with <strong className="text-ink">{bank}</strong> offers.{" "}
           <Link href="/stores" className="text-fin-orange font-medium">
@@ -159,37 +165,98 @@ export default async function StoresPage({
         </aside>
 
         <div className="flex-1 min-w-0 space-y-6">
-          <div className="flex flex-wrap gap-1.5">
-            {LETTERS.map((L) => (
-              <Link
-                key={L}
-                href={href({ letter: L === "ALL" ? undefined : L })}
-                className={`caption-strong px-2.5 py-1.5 rounded-md ${
-                  letter === L
-                    ? "bg-ink text-on-primary"
-                    : "bg-surface-2 text-ink hover:bg-hairline"
-                }`}
-              >
-                {L}
-              </Link>
-            ))}
-          </div>
+          {!isSearch && (
+            <div className="flex flex-wrap gap-1.5">
+              {LETTERS.map((L) => (
+                <Link
+                  key={L}
+                  href={href({ letter: L === "ALL" ? undefined : L })}
+                  className={`caption-strong px-2.5 py-1.5 rounded-md ${
+                    letter === L
+                      ? "bg-ink !text-white"
+                      : "bg-surface-2 text-ink hover:bg-hairline"
+                  }`}
+                >
+                  {L}
+                </Link>
+              ))}
+            </div>
+          )}
 
           <form action="/stores" method="get" className="flex gap-2">
             {categorySlug && <input type="hidden" name="category" value={categorySlug} />}
             {bank && <input type="hidden" name="bank" value={bank} />}
             <input
               name="q"
-              defaultValue={sp.q || ""}
-              placeholder="Search within stores…"
+              defaultValue={q}
+              placeholder="Search stores, categories, or offers…"
               className="flex-1 h-12 px-3.5 text-sm bg-surface-1 border border-hairline rounded-md outline-none focus:border-ink"
             />
             <ButtonPrimary type="submit">Search</ButtonPrimary>
           </form>
 
-          {filtered.length === 0 ? (
+          {isSearch ? (
+            !hasSearchResults ? (
+              <FeatureCard className="text-center py-12">
+                <p className="body-md m-0">No stores, categories, or offers matched your search.</p>
+              </FeatureCard>
+            ) : (
+              <div className="space-y-10">
+                {searchCategories.length > 0 && (
+                  <section>
+                    <h2 className="title-md text-ink mb-4">Categories</h2>
+                    <div className="flex flex-wrap gap-2">
+                      {searchCategories.map((c) => (
+                        <Link
+                          key={c.id}
+                          href={`/category/${c.slug}`}
+                          className="nav-link rounded-md bg-surface-1 border border-hairline px-4 py-2.5 text-ink hover:border-ink"
+                        >
+                          {c.name as string}
+                        </Link>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {filtered.length > 0 && (
+                  <section>
+                    <h2 className="title-md text-ink mb-4">Stores</h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {filtered.map((m) => {
+                        const coupons = m.offers.filter((o) => o.type === "coupon").length;
+                        const deals = m.offers.filter((o) => o.type === "deal").length;
+                        return (
+                          <StoreTile
+                            key={m.id}
+                            slug={m.slug as string}
+                            name={m.name as string}
+                            logo={m.logo as string}
+                            offerCount={m.offers.length}
+                            couponCount={coupons}
+                            dealCount={deals}
+                          />
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {searchOffers.length > 0 && (
+                  <section>
+                    <h2 className="title-md text-ink mb-4">Offers</h2>
+                    <div className="space-y-4">
+                      {searchOffers.map((offer) => (
+                        <OfferCard key={offer.id} offer={offer} />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            )
+          ) : filtered.length === 0 ? (
             <FeatureCard className="text-center py-12">
-              <p className="body-md m-0">No stores found for your search.</p>
+              <p className="body-md m-0">No stores found for your filters.</p>
             </FeatureCard>
           ) : (
             [...grouped.entries()]

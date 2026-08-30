@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/mongodb";
 import { Category } from "@/lib/models";
 import { asObjectId, withId } from "@/lib/serialize";
 import { slugify } from "@/lib/utils";
+import { revalidateSiteCache } from "@/lib/revalidate-site";
 
 export async function PUT(
   req: Request,
@@ -32,6 +33,7 @@ export async function PUT(
     { new: true },
   ).lean();
   if (!category) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateSiteCache();
   return NextResponse.json(withId(category));
 }
 
@@ -45,5 +47,6 @@ export async function DELETE(
   if (!oid) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   const result = await Category.findByIdAndDelete(oid);
   if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateSiteCache();
   return NextResponse.json({ ok: true });
 }

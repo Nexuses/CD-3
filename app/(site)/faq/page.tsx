@@ -22,7 +22,7 @@ export default function FaqPage() {
         <div>
           <h3 className="font-bold text-ink m-0">How do you make money?</h3>
           <p className="m-0 mt-1">
-            Through affiliate links. When you shop via CouponChrome, merchants may pay
+            Through affiliate links. When you shop via Clicks 4 Coupon, merchants may pay
             us a commission.
           </p>
         </div>

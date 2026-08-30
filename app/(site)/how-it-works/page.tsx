@@ -14,7 +14,7 @@ export default function HowItWorksPage() {
         <li>Paste the code at checkout and enjoy the savings.</li>
       </ol>
       <p>
-        CouponChrome is a directory of promo codes and deals. We earn affiliate
+        Clicks 4 Coupon is a directory of promo codes and deals. We earn affiliate
         commissions when you shop through our links — at no extra cost to you.
       </p>
     </StaticPage>

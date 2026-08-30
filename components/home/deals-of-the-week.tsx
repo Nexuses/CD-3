@@ -25,6 +25,13 @@ export function DealsOfTheWeek({ deals }: { deals: DealBanner[] }) {
               />
               <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/45 to-black/10" />
               <div className="relative z-10 flex h-full min-h-[200px] flex-col justify-end gap-2 p-5 md:min-h-[240px] md:p-7">
+                {d.logo ? (
+                  <img
+                    src={d.logo}
+                    alt=""
+                    className="mb-1 h-8 w-auto max-w-[120px] object-contain object-left"
+                  />
+                ) : null}
                 <h3 className="m-0 text-xl font-semibold leading-tight text-white md:text-2xl">
                   {d.title}
                 </h3>

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useAppRouter } from "@/lib/use-app-router";
 import Link from "next/link";
 import { FeatureCard, ButtonPrimary } from "@/components/ui";
 import { slugify } from "@/lib/utils";
@@ -23,7 +23,7 @@ export function CategoryForm({
   };
   parents: CatOption[];
 }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const isEdit = Boolean(initial?.id);
   const [name, setName] = useState(initial?.name || "");
   const [slug, setSlug] = useState(initial?.slug || "");

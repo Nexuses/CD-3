@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useAppRouter } from "@/lib/use-app-router";
 
 export function DeleteButton({
   endpoint,
@@ -10,7 +10,7 @@ export function DeleteButton({
   endpoint: string;
   redirectTo?: string;
 }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const [loading, setLoading] = useState(false);
 
   async function onDelete() {

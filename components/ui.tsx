@@ -2,27 +2,34 @@ import { ReactNode, ButtonHTMLAttributes } from "react";
 
 export function LogoMark({
   className = "",
-  onDark = false,
+  onDark: _onDark = false,
+  size = "md",
 }: {
   className?: string;
   onDark?: boolean;
+  size?: "sm" | "md";
 }) {
+  const height = size === "sm" ? 28 : 32;
+  const maxWidth = size === "sm" ? 120 : 148;
+
   return (
-    <span
-      className={`inline-flex items-center gap-2 font-medium text-[17px] tracking-tight ${
-        onDark ? "text-inverse-ink" : "text-ink"
-      } ${className}`}
-    >
-      <span
-        className={`inline-flex h-7 w-7 items-center justify-center rounded-md text-xs font-semibold ${
-          onDark ? "bg-surface-1 text-ink" : "bg-ink text-on-primary"
-        }`}
-      >
-        CC
-      </span>
-      <span>
-        Coupon<span className="text-fin-orange">Chrome</span>
-      </span>
+    <span className={`inline-flex shrink-0 items-center ${className}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/logo.png"
+        alt="Clicks 4 Coupon"
+        width={maxWidth}
+        height={height}
+        className="object-contain"
+        style={{
+          display: "block",
+          height,
+          maxHeight: height,
+          width: "auto",
+          maxWidth,
+          objectFit: "contain",
+        }}
+      />
     </span>
   );
 }

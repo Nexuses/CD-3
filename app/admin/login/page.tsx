@@ -1,12 +1,12 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useAppRouter } from "@/lib/use-app-router";
 import Link from "next/link";
 import { LogoMark, ButtonPrimary, FeatureCard } from "@/components/ui";
 
 export default function AdminLoginPage() {
-  const router = useRouter();
+  const router = useAppRouter();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");

@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { connectDB } from "@/lib/mongodb";
-import { Category, Merchant, Offer } from "@/lib/models";
-import { mapId, offerShape } from "@/lib/serialize";
 import { OfferCard } from "@/components/offer-card";
 import { OfferTabs } from "@/components/offer-tabs";
 import { BadgePill } from "@/components/ui";
+import { getCategoryMetadata, getCategoryPageData } from "@/lib/site-data";
+
+export const revalidate = 300;
 
 export async function generateMetadata({
   params,
@@ -13,12 +13,11 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  await connectDB();
-  const cat = await Category.findOne({ slug }).lean();
+  const cat = await getCategoryMetadata(slug);
   if (!cat) return { title: "Category" };
   return {
     title: `${cat.name} Coupons & Offers`,
-    description: `Latest ${cat.name} coupons, promo codes, and deals on CouponChrome.`,
+    description: `Latest ${cat.name} coupons, promo codes, and deals on Clicks 4 Coupon.`,
   };
 }
 
@@ -30,43 +29,12 @@ export default async function CategoryPage({
   searchParams: Promise<{ type?: string }>;
 }) {
   const { slug } = await params;
-  const { type } = await searchParams;
+  const { type = "" } = await searchParams;
 
-  await connectDB();
-  const category = await Category.findOne({ slug }).lean();
-  if (!category) notFound();
+  const data = await getCategoryPageData(slug, type);
+  if (!data) notFound();
 
-  const baseFilter = { isActive: true, categoryIds: category._id };
-  const typeFilter = type === "coupon" || type === "deal" ? { type } : {};
-
-  const [offerDocs, allCount, couponCount, dealCount] = await Promise.all([
-    Offer.find({ ...baseFilter, ...typeFilter })
-      .sort({ clickCount: -1 })
-      .populate("merchantId", "slug name logo")
-      .lean(),
-    Offer.countDocuments(baseFilter),
-    Offer.countDocuments({ ...baseFilter, type: "coupon" }),
-    Offer.countDocuments({ ...baseFilter, type: "deal" }),
-  ]);
-
-  const offers = offerDocs.map((o) => offerShape(o));
-
-  const merchantIds = await Offer.distinct("merchantId", baseFilter);
-  const topStoreDocs = await Merchant.find({
-    isActive: true,
-    _id: { $in: merchantIds },
-  }).limit(8).lean();
-
-  const offerCounts = await Offer.aggregate([
-    { $match: baseFilter },
-    { $group: { _id: "$merchantId", count: { $sum: 1 } } },
-  ]);
-  const countMap = new Map(offerCounts.map((r) => [String(r._id), r.count as number]));
-
-  const topStores = mapId(topStoreDocs).map((s) => ({
-    ...s,
-    _count: { offers: countMap.get(s.id) || 0 },
-  }));
+  const { category, offers, allCount, couponCount, dealCount, topStores, activeType } = data;
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 py-10 md:py-16 space-y-8">
@@ -85,7 +53,7 @@ export default async function CategoryPage({
         <h1 className="display-sm text-ink m-0">{category.name} coupons & offers</h1>
         <p className="body-md mt-3 max-w-2xl">
           Discover verified {category.name.toLowerCase()} coupons and deals from top stores.
-          Updated daily on CouponChrome.
+          Updated daily on Clicks 4 Coupon.
         </p>
       </div>
 
@@ -111,7 +79,7 @@ export default async function CategoryPage({
 
       <OfferTabs
         basePath={`/category/${slug}`}
-        active={type || "all"}
+        active={activeType || "all"}
         counts={{ all: allCount, coupon: couponCount, deal: dealCount }}
       />
 

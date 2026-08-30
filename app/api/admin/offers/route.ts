@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import { Offer } from "@/lib/models";
 import { asObjectId, offerShape } from "@/lib/serialize";
+import { revalidateSiteCache } from "@/lib/revalidate-site";
 
 function parseCategoryIds(body: { categoryIds?: unknown }) {
   if (!Array.isArray(body.categoryIds)) return [];
@@ -76,5 +77,6 @@ export async function POST(req: Request) {
     categoryIds: parseCategoryIds(body),
     bankTags: parseBankTags(body),
   });
+  revalidateSiteCache();
   return NextResponse.json(offerShape(offer.toObject()), { status: 201 });
 }

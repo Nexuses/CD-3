@@ -1,7 +1,13 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { connectDB } from "../lib/mongodb";
-import { Admin, Category, Merchant, Offer } from "../lib/models";
+import {
+  DEFAULT_DEAL_BANNERS,
+  DEFAULT_HERO_SLIDES,
+  DEFAULT_SPOTLIGHT_BY_MERCHANT_SLUG,
+  HOME_CATEGORY_SEEDS,
+} from "../lib/home-defaults";
+import { Admin, Category, DealBanner, HeroSlide, Merchant, Offer } from "../lib/models";
 
 const BRAND_LOGOS: Record<string, string> = {
   amazon: "/logos/amazon.svg",
@@ -40,6 +46,8 @@ async function main() {
     Category.deleteMany({}),
     Merchant.deleteMany({}),
     Admin.deleteMany({}),
+    HeroSlide.deleteMany({}),
+    DealBanner.deleteMany({}),
   ]);
 
   const passwordHash = await bcrypt.hash("admin123", 10);
@@ -65,6 +73,18 @@ async function main() {
   const categories = await Category.insertMany(categoryData);
   const cat = Object.fromEntries(categories.map((c) => [c.slug, c._id]));
 
+  const extraCategoryData = [
+    { slug: "grocery", name: "Grocery" },
+    { slug: "jewellery", name: "Jewellery" },
+    { slug: "entertainment", name: "Entertainment" },
+    { slug: "books", name: "Books" },
+    { slug: "home-furnishings", name: "Home Furnishings" },
+  ];
+  const extraCategories = await Category.insertMany(extraCategoryData);
+  for (const c of extraCategories) {
+    cat[c.slug] = c._id;
+  }
+
   const merchantDefs = [
     { slug: "amazon", name: "Amazon", color: "#FF9900", websiteUrl: "https://www.amazon.in", description: "Shop millions of products across electronics, fashion, groceries, and more. Find verified Amazon coupons and deals updated daily.", featured: true },
     { slug: "flipkart", name: "Flipkart", color: "#2874F0", websiteUrl: "https://www.flipkart.com", description: "India's leading marketplace for mobiles, electronics, fashion, and home essentials with exclusive Flipkart deals.", featured: true },
@@ -89,7 +109,7 @@ async function main() {
       logo: logo(m.slug, m.name, m.color),
       websiteUrl: m.websiteUrl,
       description: m.description,
-      seoTitle: `${m.name} Coupons & Offers — CouponChrome`,
+      seoTitle: `${m.name} Coupons & Offers — Clicks 4 Coupon`,
       seoDescription: m.description,
       isActive: true,
       isFeatured: m.featured,
@@ -189,11 +209,57 @@ async function main() {
     });
   }
 
+  for (const seed of HOME_CATEGORY_SEEDS) {
+    const update: Record<string, unknown> = {
+      icon: seed.icon,
+      showOnHome: true,
+      homeOrder: seed.homeOrder,
+      homeHref: seed.href,
+    };
+    if (seed.name) update.name = seed.name;
+    await Category.updateOne({ slug: seed.slug }, { $set: update });
+  }
+
+  await HeroSlide.insertMany(
+    DEFAULT_HERO_SLIDES.map((slide, index) => ({
+      ...slide,
+      sortOrder: index,
+      isActive: true,
+    })),
+  );
+
+  await DealBanner.insertMany(
+    DEFAULT_DEAL_BANNERS.map((banner, index) => ({
+      ...banner,
+      sortOrder: index,
+      isActive: true,
+    })),
+  );
+
+  for (const [slug, cfg] of Object.entries(DEFAULT_SPOTLIGHT_BY_MERCHANT_SLUG)) {
+    await Merchant.updateOne(
+      { slug },
+      {
+        $set: {
+          isSpotlight: true,
+          spotlightImage: cfg.image,
+          spotlightSubtitle: cfg.subtitle,
+          spotlightOrder: cfg.order,
+        },
+      },
+    );
+  }
+
+  const heroCount = await HeroSlide.countDocuments();
+  const dealCount = await DealBanner.countDocuments();
+
   console.log("Seed complete:");
   console.log("  Admin: admin / admin123");
   console.log(`  Merchants: ${merchants.length}`);
-  console.log(`  Categories: ${categories.length}`);
+  console.log(`  Categories: ${categories.length + extraCategories.length}`);
   console.log(`  Offers: ${offers.length}`);
+  console.log(`  Hero slides: ${heroCount}`);
+  console.log(`  Deal banners: ${dealCount}`);
 }
 
 main()

@@ -5,6 +5,7 @@ import { Category } from "@/lib/models";
 import { offerCountsByCategory } from "@/lib/db-helpers";
 import { mapId, withId } from "@/lib/serialize";
 import { slugify } from "@/lib/utils";
+import { revalidateSiteCache } from "@/lib/revalidate-site";
 
 export async function GET() {
   if (!(await getSession())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -40,5 +41,6 @@ export async function POST(req: Request) {
   }
   const parentId = body.parentId ? String(body.parentId) : null;
   const category = await Category.create({ name, slug, parentId });
+  revalidateSiteCache();
   return NextResponse.json(withId(category.toObject()), { status: 201 });
 }

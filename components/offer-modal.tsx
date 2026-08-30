@@ -75,7 +75,7 @@ export function OfferModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-hairline-soft">
-          <span className="eyebrow text-ink-muted">CouponChrome</span>
+          <span className="eyebrow text-ink-muted">Clicks 4 Coupon</span>
           <button
             type="button"
             onClick={onClose}

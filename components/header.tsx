@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { useAppRouter } from "@/lib/use-app-router";
 import { LogoMark, ButtonPrimary, ButtonSecondary } from "./ui";
 import { BrandLogo } from "./store-tile";
 
@@ -16,7 +16,7 @@ export function SiteHeader({
   categories: Cat[];
   topStores: Store[];
 }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const [q, setQ] = useState("");
   const [openMenu, setOpenMenu] = useState<"cat" | "stores" | "mobile" | null>(null);
 
@@ -117,7 +117,7 @@ export function SiteHeader({
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search iPhone, Grocery, Samsung…"
+            placeholder="Search stores, categories, or offers…"
             className="w-full h-10 px-3.5 text-sm bg-surface-1 border border-hairline rounded-md outline-none focus:border-ink text-ink placeholder:text-ink-tertiary"
           />
         </form>

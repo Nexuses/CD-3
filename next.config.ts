@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
   productionBrowserSourceMaps: false,
   experimental: {
     webpackMemoryOptimizations: true,
+    staleTimes: {
+      dynamic: 120,
+      static: 300,
+    },
   },
 };
 

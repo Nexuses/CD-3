@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useAppRouter } from "@/lib/use-app-router";
 import Link from "next/link";
 import { FeatureCard, ButtonPrimary } from "@/components/ui";
 
@@ -37,7 +37,7 @@ export function OfferForm({
   merchants: MerchantOpt[];
   categories: CategoryOpt[];
 }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const isEdit = Boolean(initial?.id);
   const [form, setForm] = useState({
     merchantId: initial?.merchantId?.toString() || merchants[0]?.id?.toString() || "",

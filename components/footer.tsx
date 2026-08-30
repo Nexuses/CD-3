@@ -72,7 +72,7 @@ export function SiteFooter({
       </div>
       <div className="border-t border-hairline-soft">
         <div className="max-w-[1280px] mx-auto px-4 py-6 caption text-center md:text-left">
-          © 2026 CouponChrome. Coupons & deals directory. Not affiliated with listed merchants.
+          © 2026 Clicks 4 Coupon. Coupons & deals directory. Not affiliated with listed merchants.
         </div>
       </div>
     </footer>

@@ -6,7 +6,7 @@ export default function PrivacyPage() {
   return (
     <StaticPage title="Privacy Policy">
       <p>
-        CouponChrome uses essential cookies for the admin session only. Public visitors
+        Clicks 4 Coupon uses essential cookies for the admin session only. Public visitors
         can browse without an account. We do not sell personal data.
       </p>
       <p>

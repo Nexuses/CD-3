@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useAppRouter } from "@/lib/use-app-router";
 import Link from "next/link";
 import { FeatureCard, ButtonPrimary } from "@/components/ui";
 import { slugify } from "@/lib/utils";
@@ -23,7 +23,7 @@ const inputCls =
   "mt-1.5 w-full h-12 px-4 text-sm bg-canvas border border-hairline rounded-md outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 export function StoreForm({ initial }: { initial?: StoreFormData }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const [form, setForm] = useState<StoreFormData>(
     initial || {
       name: "",

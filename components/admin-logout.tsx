@@ -1,9 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useAppRouter } from "@/lib/use-app-router";
 
 export function AdminLogoutButton() {
-  const router = useRouter();
+  const router = useAppRouter();
 
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });

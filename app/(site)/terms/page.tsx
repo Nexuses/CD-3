@@ -6,12 +6,12 @@ export default function TermsPage() {
   return (
     <StaticPage title="Terms & Conditions">
       <p>
-        CouponChrome provides promotional codes and deal links as-is. Merchants set
+        Clicks 4 Coupon provides promotional codes and deal links as-is. Merchants set
         offer terms; we are not responsible for expired codes, stockouts, or merchant
         policy changes.
       </p>
       <p>
-        CouponChrome is not affiliated with or endorsed by the brands listed unless
+        Clicks 4 Coupon is not affiliated with or endorsed by the brands listed unless
         explicitly stated. Brand names and logos are trademarks of their respective
         owners.
       </p>
